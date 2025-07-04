@@ -1,7 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
+import { supabase } from "../../lib/supabase";
 import multer from "multer";
-import path from "path";
-import fs from "fs";
 
 interface NextApiRequestWithFile extends NextApiRequest {
   file?: Express.Multer.File;
@@ -13,18 +12,7 @@ export const config = {
   },
 };
 
-const uploadDir = path.join(process.cwd(), "public/uploads");
-if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
-
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, uploadDir),
-  filename: (_req, file, cb) => {
-    const safeName = file.originalname.replace(/[^a-z0-9.-]/gi, "_");
-    cb(null, `${Date.now()}-${safeName}`);
-  },
-});
-
-const upload = multer({ storage });
+const upload = multer({ storage: multer.memoryStorage() });
 
 function runMiddleware(
   req: NextApiRequest,
@@ -40,15 +28,22 @@ function runMiddleware(
     });
   });
 }
-// Helper: delete all files in uploadDir
-function clearUploadsFolder() {
-  const files = fs.readdirSync(uploadDir);
-  for (const file of files) {
-    const filePath = path.join(uploadDir, file);
-    if (fs.statSync(filePath).isFile()) {
-      fs.unlinkSync(filePath);
-    }
-  }
+
+async function clearSupabaseUploads() {
+  const { data, error: listError } = await supabase.storage
+    .from("audio-files")
+    .list("uploads", { limit: 100 });
+
+  if (listError) throw listError;
+  if (!data) return;
+
+  const pathsToDelete = data.map((file) => `uploads/${file.name}`);
+
+  const { error: deleteError } = await supabase.storage
+    .from("audio-files")
+    .remove(pathsToDelete);
+
+  if (deleteError) throw deleteError;
 }
 
 export default async function handler(
@@ -57,7 +52,7 @@ export default async function handler(
 ) {
   if (req.method === "DELETE") {
     try {
-      clearUploadsFolder();
+      clearSupabaseUploads();
       return res
         .status(200)
         .json({ success: true, message: "Uploads cleared" });
@@ -70,14 +65,29 @@ export default async function handler(
     try {
       await runMiddleware(req, res, upload.single("audio"));
 
-      if (!req.file) {
+      const file = req.file;
+
+      if (!file) {
         res.status(400).json({ error: "No file uploaded" });
         return;
       }
+      const safeName = file.originalname.replace(/[^a-z0-9.-]/gi, "_");
+      const filePath = `uploads/${Date.now()}-${safeName}`;
+
+      const { error } = await supabase.storage
+        .from("audio-files") // replace with your bucket name
+        .upload(filePath, file.buffer, {
+          contentType: file.mimetype,
+          upsert: true,
+        });
+
+      if (error) throw error;
+
+      const publicUrl = `${process.env.SUPABASE_URL}/storage/v1/object/public/audio-files/${filePath}`;
 
       res.status(200).json({
         success: true,
-        url: `/uploads/${req.file.filename}`,
+        url: publicUrl,
       });
     } catch (err: unknown) {
       res.status(500).json({ error: err || "Upload failed" });
