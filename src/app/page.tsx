@@ -41,6 +41,7 @@ export default function Home() {
         name="audio"
         className="hidden"
         type="file"
+        accept=".wav,.mp3"
         multiple
         onChange={(e) => {
           const inputfiles = e.target.files;
