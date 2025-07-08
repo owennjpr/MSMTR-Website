@@ -29,15 +29,17 @@ function runMiddleware(
   });
 }
 
-async function clearSupabaseUploads() {
+async function clearSupabaseUploads(req: NextApiRequest) {
+  const code = req.query.code as string;
+
   const { data, error: listError } = await supabase.storage
     .from("audio-files")
-    .list("uploads", { limit: 100 });
+    .list(code, { limit: 100 });
 
   if (listError) throw listError;
   if (!data) return;
 
-  const pathsToDelete = data.map((file) => `uploads/${file.name}`);
+  const pathsToDelete = data.map((file) => `${code}/${file.name}`);
 
   const { error: deleteError } = await supabase.storage
     .from("audio-files")
@@ -52,7 +54,7 @@ export default async function handler(
 ) {
   if (req.method === "DELETE") {
     try {
-      clearSupabaseUploads();
+      clearSupabaseUploads(req);
       return res
         .status(200)
         .json({ success: true, message: "Uploads cleared" });
@@ -72,10 +74,10 @@ export default async function handler(
         return;
       }
       const safeName = file.originalname.replace(/[^a-z0-9.-]/gi, "_");
-      const filePath = `uploads/${Date.now()}-${safeName}`;
+      const filePath = `${req.body.code}/${Date.now()}-${safeName}`;
 
       const { error } = await supabase.storage
-        .from("audio-files") // replace with your bucket name
+        .from("audio-files")
         .upload(filePath, file.buffer, {
           contentType: file.mimetype,
           upsert: true,
