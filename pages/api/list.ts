@@ -22,7 +22,7 @@ export default async function handler(
       return `${process.env.SUPABASE_URL}/storage/v1/object/public/audio-files/${code}/${file.name}`;
     });
 
-    res.status(200).json({ urls });
+    res.status(200).json({ urls: urls });
   } catch (err) {
     res.status(500).json({ error: err || "Could not list files" });
   }
