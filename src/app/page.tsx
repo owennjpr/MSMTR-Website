@@ -48,7 +48,9 @@ export default function Home() {
           return response;
         })
       );
-      setStatus("Uploaded Successfully! Try Refreshing in Unity");
+      setStatus(
+        "Uploaded Successfully! Type the room code into Unity to fetch the files!"
+      );
     } catch (error) {
       setStatus("Upload Failed: " + error);
     }
